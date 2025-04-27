@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import luxury font */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap');
+
+/* Luxury Title Style */
+.luxury-title {
+  font-family: 'Playfair Display', serif;
+  color: #d4af37; /* Rich gold */
+}
+
+/* Luxury Button Style */
+.luxury-button {
+  background-color: #d4af37;
+  color: white;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px; /* Fully rounded */
+  transition: background-color 0.3s ease;
+}
+
+.luxury-button:hover {
+  background-color: #bfa132; /* Slightly darker gold on hover */
+}
+
+/* Luxury Input Style */
+.luxury-input {
+  border: 1px solid #d4af37;
+  background-color: #f8f8f8; /* Light gray background */
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  width: 100%;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
+/* Fade-In Gold Animation for Titles */
+@keyframes fadeInGold {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+    color: white;
+  }
+  50% {
+    opacity: 0.5;
+    color: #d4af37;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    color: #d4af37;
+  }
+}
+
+.luxury-fade-gold {
+  animation: fadeInGold 1.5s ease forwards;
+}
