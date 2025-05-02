@@ -2,41 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import luxury font */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap');
+
+/* Global Styles */
+body {
+  background-color: black;
+  color: white;
+}
 
 /* Luxury Title Style */
 .luxury-title {
   font-family: 'Playfair Display', serif;
-  color: #d4af37; /* Rich gold */
+  color: #d4af37;
 }
 
 /* Luxury Button Style */
 .luxury-button {
   background-color: #d4af37;
-  color: white;
+  color: black;
   font-weight: bold;
   padding: 0.5rem 1rem;
-  border-radius: 9999px; /* Fully rounded */
-  transition: background-color 0.3s ease;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
 }
 
 .luxury-button:hover {
-  background-color: #bfa132; /* Slightly darker gold on hover */
+  background-color: #bfa132;
+  box-shadow: 0 0 10px #d4af37;
 }
 
 /* Luxury Input Style */
 .luxury-input {
+  background-color: #222;
+  color: white;
   border: 1px solid #d4af37;
-  background-color: #f8f8f8; /* Light gray background */
   padding: 0.75rem;
   border-radius: 0.75rem;
-  width: 100%;
+  width: 85%;
   margin-bottom: 1rem;
   font-size: 1rem;
 }
 
-/* Fade-In Gold Animation for Titles */
+/* Text Animation */
 @keyframes fadeInGold {
   0% {
     opacity: 0;
@@ -56,4 +63,19 @@
 
 .luxury-fade-gold {
   animation: fadeInGold 1.5s ease forwards;
+}
+/* Spinner */
+.luxury-spinner {
+  border: 4px solid #d4af37;
+  border-top: 4px solid transparent;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
