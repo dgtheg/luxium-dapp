@@ -2,15 +2,26 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import "./index.css";
 import LuxiumTokenABI from "./LuxiumToken.json";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
 
-// ✅ Deployed Contract Addresses (RSK Testnet)
-const TOKEN_ADDRESS = "0x1c6292d9D640EA906268C58c2B599181adac425D";
-const FIBONACCI_MANAGER_ADDRESS = "0x3DA33F11b25BC619DbC1956f43BA655FD3d6Ce2C";
+// ✅ Contract addresses
+const TOKEN_ADDRESS = "0x2b460Ec66AD7F427370b17A951e0135cc17eD7B3";
+const FIBONACCI_MANAGER_ADDRESS = "0x6cbaD1f82fd9F454a1508B7cF31B386C7E1072f9";
 
-// ABIs
+// ✅ ABIs
 const TOKEN_ABI = LuxiumTokenABI.abi;
 const FIBONACCI_ABI = [
-  "function getCurrentPrice() public view returns (uint256)"
+  "function getCurrentPrice() view returns (uint256)",
+  "function getCurrentBracket() view returns (uint256)",
+  "function getNextBracket() view returns (uint256,uint256)"
 ];
 
 function App() {
@@ -22,36 +33,43 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [luxiumPrice, setLuxiumPrice] = useState(null);
+  const [chartData, setChartData] = useState([]);
+  const [currentBracket, setCurrentBracket] = useState(null);
+  const [nextBracketInfo, setNextBracketInfo] = useState({ price: null, threshold: null });
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
 
-  async function connectWallet() {
-    if (!window.ethereum) {
-      alert("MetaMask is not installed!");
-      return;
+  useEffect(() => {
+    if (walletAddress) {
+      const interval = setInterval(() => {
+        fetchLuxiumPrice();
+      }, 15000);
+      return () => clearInterval(interval);
     }
+  }, [walletAddress]);
+
+  async function connectWallet() {
+    if (!window.ethereum) return alert("MetaMask is not installed!");
 
     try {
       setIsConnecting(true);
-
-      // ✅ ONLY switch to RSK Testnet (no add!)
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x1f" }], // 31 in decimal
+        params: [{ chainId: "0x1f" }],
       });
 
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      const selectedAccount = accounts[0];
-      setWalletAddress(selectedAccount);
+      const account = accounts[0];
+      setWalletAddress(account);
 
-      await fetchBalance(selectedAccount);
+      await fetchBalance(account);
       await fetchLuxiumPrice();
     } catch (err) {
       console.error("Wallet connection failed:", err);
-      alert("Wallet connection failed. See console.");
+      alert("Wallet connection failed.");
     } finally {
       setIsConnecting(false);
     }
@@ -72,23 +90,42 @@ function App() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(FIBONACCI_MANAGER_ADDRESS, FIBONACCI_ABI, provider);
-      const price = await contract.getCurrentPrice();
-      setLuxiumPrice(ethers.formatUnits(price, 18));
+
+      const [price, bracket, next] = await Promise.all([
+        contract.getCurrentPrice(),
+        contract.getCurrentBracket(),
+        contract.getNextBracket(),
+      ]);
+
+      const priceFormatted = parseFloat(ethers.formatUnits(price, 18));
+      setLuxiumPrice(priceFormatted.toFixed(6));
+      setCurrentBracket(bracket.toString());
+
+      setNextBracketInfo({
+        price: parseFloat(ethers.formatUnits(next[0], 18)).toFixed(6),
+        threshold: ethers.formatUnits(next[1], 18),
+      });
+
+      setChartData((prev) => [
+        ...prev.slice(-19),
+        { time: new Date().toLocaleTimeString(), price: priceFormatted },
+      ]);
     } catch (err) {
-      console.warn("Price fetch failed, using fallback value.");
-      setLuxiumPrice("1.25");
+      console.error("Price fetch error:", err);
     }
   }
 
   async function transferTokens() {
     if (!recipient || !amount || !ethers.isAddress(recipient)) {
-      return alert("Please enter a valid recipient and amount.");
+      return alert("Enter a valid recipient and amount.");
     }
+
     try {
       setTxStatus("Sending...");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+
       const tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
       await tx.wait();
       setTxStatus("Transfer successful!");
@@ -119,8 +156,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4 text-white">
-      <img src="/luxiumlogo.jpg" alt="Luxium Logo" className="mb-8" style={{ width: "300px" }} />
-
+      <img src="/luxiumlogo.jpg" alt="Luxium Logo" className="mb-6" style={{ width: "300px" }} />
       <h1 className="text-3xl font-bold luxury-title luxury-fade-gold">Welcome to Luxium</h1>
       <p className="text-gray-400 mt-2 mb-6">Your gateway to the Luxium Economy</p>
 
@@ -135,13 +171,12 @@ function App() {
             <button onClick={copyAddress} className="luxury-button px-2 py-1 text-xs">Copy</button>
           </div>
 
-          {tokenBalance !== null && (
+          {tokenBalance && (
             <div className="mt-4">
-              <p className="text-lg font-bold">Luxium Balance: {tokenBalance} LUX</p>
-              <p className="text-md mt-1">
-                Value: $
-                {(parseFloat(tokenBalance) * parseFloat(luxiumPrice)).toFixed(2)} USD
-              </p>
+              <p className="text-lg font-bold">Balance: {tokenBalance} LUX</p>
+              <p>Price: ${luxiumPrice} / LUX</p>
+              <p className="text-sm mt-1">Bracket: #{currentBracket}</p>
+              <p className="text-sm">Next: ${nextBracketInfo.price} @ {nextBracketInfo.threshold} LUX</p>
             </div>
           )}
         </div>
@@ -167,6 +202,21 @@ function App() {
             Send Tokens
           </button>
           {txStatus && <p className="mt-2 text-gray-400">{txStatus}</p>}
+        </div>
+      )}
+
+      {chartData.length > 0 && (
+        <div className="mt-10 w-full max-w-3xl">
+          <h2 className="text-xl mb-2 font-bold text-center">LUX Price Chart</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
+              <XAxis dataKey="time" stroke="#aaa" />
+              <YAxis stroke="#aaa" domain={['auto', 'auto']} />
+              <Tooltip />
+              <Line type="monotone" dataKey="price" stroke="#FFD700" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
     </div>
