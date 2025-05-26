@@ -1,19 +1,26 @@
+// src/App.jsx
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import "./index.css";
 import LuxiumTokenABI from "./LuxiumToken.json";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-// ✅ Final Deployed Contract Addresses (RSK Testnet)
 const TOKEN_ADDRESS = "0xF7542e060847d5391d47df3061E91dF567FFF94A";
 const FIBONACCI_MANAGER_ADDRESS = "0x65c01339F2461C065809CE5A955CB510B214B183";
 
-// ABIs
 const TOKEN_ABI = LuxiumTokenABI.abi;
 const FIBONACCI_ABI = [
-  "function getCurrentPrice() public view returns (uint256)",
-  "function getCurrentBracket() public view returns (uint256)",
-  "function getNextBracket() public view returns (uint256, uint256)"
+  "function getCurrentPrice() view returns (uint256)",
+  "function getCurrentBracket() view returns (uint256)",
+  "function getNextBracket() view returns (uint256,uint256)"
 ];
 
 function App() {
@@ -26,26 +33,23 @@ function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [luxiumPrice, setLuxiumPrice] = useState(null);
   const [currentBracket, setCurrentBracket] = useState(null);
-  const [nextBracket, setNextBracket] = useState({ price: null, threshold: null });
-
-  const [chartData, setChartData] = useState([]);
+  const [nextBracketInfo, setNextBracketInfo] = useState({ price: null, threshold: null });
+  const [priceHistory, setPriceHistory] = useState([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1500);
+    const timer = setTimeout(() => setIsLoading(false), 1000);
     return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
     if (walletAddress) {
-      fetchLuxiumStats();
+      const interval = setInterval(fetchLuxiumPrice, 10000);
+      return () => clearInterval(interval);
     }
   }, [walletAddress]);
 
   async function connectWallet() {
-    if (!window.ethereum) {
-      alert("MetaMask is not installed!");
-      return;
-    }
+    if (!window.ethereum) return alert("MetaMask is not installed!");
 
     try {
       setIsConnecting(true);
@@ -53,19 +57,23 @@ function App() {
         method: "wallet_switchEthereumChain",
         params: [{ chainId: "0x1f" }],
       });
-
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       const selectedAccount = accounts[0];
       setWalletAddress(selectedAccount);
-
-      await fetchBalance(selectedAccount);
-      await fetchLuxiumStats();
+      await fetchAll(selectedAccount);
     } catch (err) {
       console.error("Wallet connection failed:", err);
       alert("Wallet connection failed. See console.");
     } finally {
       setIsConnecting(false);
     }
+  }
+
+  async function fetchAll(account) {
+    await fetchBalance(account);
+    await fetchLuxiumPrice();
+    await fetchCurrentBracket();
+    await fetchNextBracket();
   }
 
   async function fetchBalance(account) {
@@ -79,31 +87,45 @@ function App() {
     }
   }
 
-  async function fetchLuxiumStats() {
+  async function fetchLuxiumPrice() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(FIBONACCI_MANAGER_ADDRESS, FIBONACCI_ABI, provider);
-
       const price = await contract.getCurrentPrice();
-      const bracket = await contract.getCurrentBracket();
-      const [nextPrice, nextThreshold] = await contract.getNextBracket();
+      const formattedPrice = parseFloat(ethers.formatUnits(price, 18));
+      setLuxiumPrice(formattedPrice);
+      setPriceHistory(prev => [...prev.slice(-19), {
+        time: new Date().toLocaleTimeString(),
+        price: formattedPrice
+      }]);
+    } catch (err) {
+      console.warn("Price fetch failed:", err);
+      setLuxiumPrice("0.0001");
+    }
+  }
 
-      setLuxiumPrice(ethers.formatUnits(price, 18));
+  async function fetchCurrentBracket() {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(FIBONACCI_MANAGER_ADDRESS, FIBONACCI_ABI, provider);
+      const bracket = await contract.getCurrentBracket();
       setCurrentBracket(bracket.toString());
-      setNextBracket({
+    } catch (err) {
+      console.error("Bracket fetch error:", err);
+    }
+  }
+
+  async function fetchNextBracket() {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(FIBONACCI_MANAGER_ADDRESS, FIBONACCI_ABI, provider);
+      const [nextPrice, nextThreshold] = await contract.getNextBracket();
+      setNextBracketInfo({
         price: ethers.formatUnits(nextPrice, 18),
         threshold: ethers.formatUnits(nextThreshold, 18),
       });
-
-      setChartData((prev) => [
-        ...prev.slice(-9),
-        {
-          name: `B${bracket}`,
-          price: parseFloat(ethers.formatUnits(price, 18)),
-        },
-      ]);
     } catch (err) {
-      console.error("Failed to fetch stats:", err);
+      console.warn("Next bracket fetch failed:", err);
     }
   }
 
@@ -119,7 +141,7 @@ function App() {
       const tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
       await tx.wait();
       setTxStatus("Transfer successful!");
-      await fetchBalance(walletAddress);
+      await fetchAll(walletAddress);
     } catch (err) {
       console.error("Transfer failed:", err);
       setTxStatus("Transfer failed");
@@ -147,7 +169,6 @@ function App() {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4 text-white">
       <img src="/luxiumlogo.jpg" alt="Luxium Logo" className="mb-8" style={{ width: "300px" }} />
-
       <h1 className="text-3xl font-bold luxury-title luxury-fade-gold">Welcome to Luxium</h1>
       <p className="text-gray-400 mt-2 mb-6">Your gateway to the Luxium Economy</p>
 
@@ -166,17 +187,33 @@ function App() {
             <div className="mt-4">
               <p className="text-lg font-bold">Luxium Balance: {tokenBalance} LUX</p>
               <p className="text-md mt-1">
-                Value: ${(parseFloat(tokenBalance) * parseFloat(luxiumPrice || 0)).toFixed(6)} USD
+                Value: ${(parseFloat(tokenBalance) * parseFloat(luxiumPrice || "0")).toFixed(6)} USD
               </p>
             </div>
           )}
+        </div>
+      )}
 
-          <div className="mt-6 text-sm">
-            <p>🟢 Current Bracket: {currentBracket}</p>
-            <p>💰 Current Price: {luxiumPrice} RBTC</p>
-            <p>🟠 Next Price: {nextBracket.price} RBTC</p>
-            <p>🔜 Next Threshold: {nextBracket.threshold} LUX</p>
-          </div>
+      {walletAddress && (
+        <div className="mt-6 text-center text-sm">
+          <p>🟢 <strong>Current Bracket:</strong> {currentBracket}</p>
+          <p>💰 <strong>Current Price:</strong> {luxiumPrice} RBTC</p>
+          <p>🟠 <strong>Next Price:</strong> {nextBracketInfo.price} RBTC</p>
+          <p>🧱 <strong>Next Threshold:</strong> {nextBracketInfo.threshold} LUX</p>
+        </div>
+      )}
+
+      {walletAddress && (
+        <div className="mt-6 w-full max-w-lg">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={priceHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" tick={{ fill: 'white' }} />
+              <YAxis tick={{ fill: 'white' }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="price" stroke="#FFD700" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -200,20 +237,6 @@ function App() {
             Send Tokens
           </button>
           {txStatus && <p className="mt-2 text-gray-400">{txStatus}</p>}
-        </div>
-      )}
-
-      {chartData.length > 0 && (
-        <div className="w-full max-w-2xl mt-8">
-          <h2 className="text-xl mb-2 text-center text-gold-400">Live Price Chart</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={chartData}>
-              <XAxis dataKey="name" stroke="#fff" />
-              <YAxis domain={['auto', 'auto']} stroke="#fff" />
-              <Tooltip />
-              <Line type="monotone" dataKey="price" stroke="#facc15" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
         </div>
       )}
     </div>
